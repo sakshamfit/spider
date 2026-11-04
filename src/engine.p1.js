@@ -10,11 +10,15 @@ const $$ = s => [...document.querySelectorAll(s)];
 function wrapAng(a) { while (a > Math.PI) a -= TAU; while (a < -Math.PI) a += TAU; return a; }
 function mkCanvas(w, h) { const c = document.createElement('canvas'); c.width = Math.max(1, Math.round(w)); c.height = Math.max(1, Math.round(h)); return c; }
 function loadImg(src) { return new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error('img load failed')); i.src = src; }); }
+/* hero-local coords: the web canvas lives inside the hero, so world y = clientY + scrollY */
+function heroLocal(x, y) { return { x, y: y + scrollY }; }
 
 /* ============================================================ canvas */
 const pageEl = $('#page');
-const canvas = $('#web');
+const canvas = $('#web');          /* hero-local: silk, spider, dew, splats */
 const ctx = canvas.getContext('2d');
+const flyCanvas = $('#flyweb');    /* document-fixed: the fly + cocoon only */
+const fctx = flyCanvas.getContext('2d');
 let W = innerWidth, H = innerHeight, DPR = 1;
 let shadowC = mkCanvas(8, 8), shadowX = shadowC.getContext('2d');
 let maskC = mkCanvas(8, 8), maskX = maskC.getContext('2d'), maskData = null;

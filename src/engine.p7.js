@@ -188,14 +188,8 @@ function clearWeb() {
 }
 
 /* ============================================================ scroll */
-function shiftAllPins() { if (typeof shiftPins === 'function') shiftPins(); }
-
-function onScrollJump() {
-  for (const s of ENG.splats) if (s.fall === undefined) s.fall = rand(0, 0.3);
-  clearDebris();
-  shiftAllPins();
-}
-
+/* silk + spider live on the hero canvas and scroll away with it, so scrolling
+   needs no web surgery — only the nav highlight follows the section */
 function updateActiveNav() {
   const links = $$('.nav-links a');
   let best = 0;
@@ -210,16 +204,16 @@ function updateActiveNav() {
 }
 
 function initScroll() {
-  let lastY = scrollY, timer = 0;
   document.addEventListener('scroll', () => {
     requestAnimationFrame(updateActiveNav);
-    if (Math.abs(scrollY - lastY) < 3) return;
-    lastY = scrollY;
-    onScrollJump();
-    clearTimeout(timer);
-    timer = setTimeout(() => { shiftAllPins(); resampleAnchors(); }, 150);
   }, { passive: true });
   updateActiveNav();
+}
+
+/* ============================================================ wipe button */
+function initWipe() {
+  const btn = $('#wipe');
+  btn.addEventListener('click', () => clearWeb());
 }
 
 /* ============================================================ resize */
@@ -230,6 +224,9 @@ function doResize() {
   canvas.width = Math.round(W * DPR);
   canvas.height = Math.round(H * DPR);
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  flyCanvas.width = Math.round(W * DPR);
+  flyCanvas.height = Math.round(H * DPR);
+  fctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   /* shadows are soft and offset — half resolution keeps the composite cheap */
   shadowC = mkCanvas(W / 2, H / 2); shadowX = shadowC.getContext('2d');
   maskC = mkCanvas(W, H); maskX = maskC.getContext('2d'); maskData = null;
@@ -285,9 +282,11 @@ function frame(now) {
     }
   }
 
-  /* render */
+  /* render: hero scene on the hero canvas, fly on the fixed layer */
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   ctx.clearRect(0, 0, W, H);
+  fctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  fctx.clearRect(0, 0, W, H);
   drawDebris();
   drawSilk();
   drawSpider();
@@ -313,11 +312,12 @@ async function boot() {
     initPlayer();
     initInput();
     initScroll();
+    initWipe();
     doResize();
     ENG.ready = true;
     /* hotlinked images shift layout as they arrive — resample when they do */
     document.addEventListener('load', e => {
-      if (e.target && e.target.tagName === 'IMG') { shiftAllPins(); scheduleResample(200); }
+      if (e.target && e.target.tagName === 'IMG') scheduleResample(200);
     }, true);
     requestAnimationFrame(frame);
   } catch (err) {

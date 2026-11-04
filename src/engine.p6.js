@@ -97,7 +97,9 @@ function tryCatchFly() {
   const sp = ENG.spider, f = ENG.fly;
   if (!sp || !f || f.caught) return;
   const mouth = { x: sp.x + Math.cos(sp.ang) * 360 * sp.K, y: sp.y + Math.sin(sp.ang) * 360 * sp.K };
-  if (hyp(f.x - mouth.x, f.y - mouth.y) < 55 * ENG.flySize) {
+  const fy = f.y + scrollY; /* fly is viewport-fixed; the spider plays in hero space */
+  if (fy > H - 6) return;   /* fly is out on the portfolio: nothing to catch here */
+  if (hyp(f.x - mouth.x, fy - mouth.y) < 55 * ENG.flySize) {
     f.caught = 1;
     f.catchT = 0;
     f.catchDur = rand(3, 4.2);
@@ -113,7 +115,8 @@ function startPounce() {
   if (!sp || sp.jump || sp.intro.stage < 3) return;
   const mouth = 360 * sp.K;
   const fx = f.vis > 0.05 ? f.x : ENG.pointer.x;
-  const fy = f.vis > 0.05 ? f.y : ENG.pointer.y;
+  const fy = (f.vis > 0.05 ? f.y : ENG.pointer.y) + scrollY;
+  if (fy > H - 6) return; /* target scrolled off the hero: no pounce */
   const dx = fx - sp.x, dy = fy - sp.y;
   const d = hyp(dx, dy);
   const ux = d > 0.001 ? dx / d : Math.cos(sp.ang);
@@ -141,65 +144,65 @@ function drawFly() {
   const scale = 79 * fs / FLY_SPR;
   const y = 1 - f.landed; /* hover height */
   const bob = Math.sin(6 * f.buzzT) * 1.2 * y;
-  ctx.save();
-  ctx.globalAlpha = f.vis;
+  fctx.save();
+  fctx.globalAlpha = f.vis;
   /* shadow */
-  ctx.save();
-  ctx.translate(f.x + 3 + 14 * y, f.y + 5 + 26 * y + bob * 0.4);
-  ctx.scale(scale, scale);
-  ctx.fillStyle = 'rgba(0,0,0,' + (0.2 + 0.18 * f.landed).toFixed(3) + ')';
-  ctx.filter = 'blur(' + ((3 + 9 * y) * scale).toFixed(1) + 'px)';
-  ctx.beginPath();
-  ctx.ellipse(0, 0, 180, 120, 0, 0, TAU);
-  ctx.fill();
-  ctx.restore();
+  fctx.save();
+  fctx.translate(f.x + 3 + 14 * y, f.y + 5 + 26 * y + bob * 0.4);
+  fctx.scale(scale, scale);
+  fctx.fillStyle = 'rgba(0,0,0,' + (0.2 + 0.18 * f.landed).toFixed(3) + ')';
+  fctx.filter = 'blur(' + ((3 + 9 * y) * scale).toFixed(1) + 'px)';
+  fctx.beginPath();
+  fctx.ellipse(0, 0, 180, 120, 0, 0, TAU);
+  fctx.fill();
+  fctx.restore();
   /* body + wings */
-  ctx.translate(f.x, f.y + bob * 0.4);
-  ctx.rotate(f.ang + Math.PI / 2);
-  ctx.scale(scale, scale);
-  ctx.drawImage(flySprites.body, -FLY_SPR / 2, -FLY_SPR / 2);
+  fctx.translate(f.x, f.y + bob * 0.4);
+  fctx.rotate(f.ang + Math.PI / 2);
+  fctx.scale(scale, scale);
+  fctx.drawImage(flySprites.body, -FLY_SPR / 2, -FLY_SPR / 2);
   /* wings */
   const caught = f.caught;
   const hz = caught ? 46 : 34;
   const q = Math.sin(TAU * hz * f.buzzT);
   const fold = f.landed;
   function wing(w, hinge, dir) {
-    ctx.save();
-    ctx.translate(hinge.x - FLY_SPR / 2, hinge.y - FLY_SPR / 2);
+    fctx.save();
+    fctx.translate(hinge.x - FLY_SPR / 2, hinge.y - FLY_SPR / 2);
     const base = dir * 1.05 * fold;
-    ctx.rotate(base + dir * 0.9 * q * (1 - fold));
-    ctx.scale(1, 1 - 0.25 * Math.abs(q) * (1 - fold));
-    ctx.drawImage(w.c, w.x - hinge.x, w.y - hinge.y);
-    ctx.restore();
+    fctx.rotate(base + dir * 0.9 * q * (1 - fold));
+    fctx.scale(1, 1 - 0.25 * Math.abs(q) * (1 - fold));
+    fctx.drawImage(w.c, w.x - hinge.x, w.y - hinge.y);
+    fctx.restore();
   }
   wing(flySprites.wingL, HINGE_L, -1);
   wing(flySprites.wingR, HINGE_R, 1);
-  ctx.restore();
+  fctx.restore();
   /* cocoon */
   if (f.caught && f.cocoon) {
     const prog = clamp(f.catchT / 1.2, 0, 1); /* wraps over first 1.2s */
     const fade = f.catchDur > 0 ? clamp((f.catchDur - f.catchT) / 0.6, 0, 1) : 1;
     const R = 30 * fs;
-    ctx.save();
-    ctx.translate(f.x, f.y);
-    ctx.globalAlpha = f.vis * fade;
-    ctx.strokeStyle = 'rgba(255,255,255,.85)';
-    ctx.lineWidth = 2.2 * fs;
+    fctx.save();
+    fctx.translate(f.x, f.y);
+    fctx.globalAlpha = f.vis * fade;
+    fctx.strokeStyle = 'rgba(255,255,255,.85)';
+    fctx.lineWidth = 2.2 * fs;
     const n = Math.floor(prog * 7);
     for (let i = 0; i < n; i++) {
-      ctx.beginPath();
-      ctx.ellipse(0, 0, R * (1 + i * 0.05), R * 0.7, i * 0.45 + f.buzzT * 0.2, 0, TAU);
-      ctx.stroke();
+      fctx.beginPath();
+      fctx.ellipse(0, 0, R * (1 + i * 0.05), R * 0.7, i * 0.45 + f.buzzT * 0.2, 0, TAU);
+      fctx.stroke();
     }
-    ctx.lineWidth = 1 * fs;
-    ctx.strokeStyle = 'rgba(255,255,255,.5)';
+    fctx.lineWidth = 1 * fs;
+    fctx.strokeStyle = 'rgba(255,255,255,.5)';
     for (const fb of f.cocoon.fibres) {
       if (fb.a / TAU > prog) continue;
-      ctx.beginPath();
-      ctx.moveTo(Math.cos(fb.a) * R * 0.7 * fb.r, Math.sin(fb.a) * R * 0.55 * fb.r);
-      ctx.lineTo(Math.cos(fb.a + fb.da) * (R * 0.7 * fb.r + fb.l), Math.sin(fb.a + fb.da) * (R * 0.55 * fb.r + fb.l));
-      ctx.stroke();
+      fctx.beginPath();
+      fctx.moveTo(Math.cos(fb.a) * R * 0.7 * fb.r, Math.sin(fb.a) * R * 0.55 * fb.r);
+      fctx.lineTo(Math.cos(fb.a + fb.da) * (R * 0.7 * fb.r + fb.l), Math.sin(fb.a + fb.da) * (R * 0.55 * fb.r + fb.l));
+      fctx.stroke();
     }
-    ctx.restore();
+    fctx.restore();
   }
 }

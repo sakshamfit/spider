@@ -58,12 +58,13 @@ Rope.prototype.step = function (dt) {
     p.x += vx + wind;
     p.y += vy + 128 * dt2 + Math.sin(0.8 * B + this.phase * 2) * 6 * dt2;
   }
-  /* pointer pushes strands aside like a finger through thread */
+  /* pointer pushes strands aside like a finger through thread (hero-local) */
   const pt = ENG.pointer;
   if (pt.has) {
+    const ppx = pt.x, ppy = pt.y + scrollY;
     for (let i = 1; i < n; i++) {
       const p = pts[i];
-      const dx = p.x - pt.x, dy = p.y - pt.y;
+      const dx = p.x - ppx, dy = p.y - ppy;
       const d = hyp(dx, dy);
       if (d < 46 && d > 0.001) {
         const f = (46 - d) / 46;
@@ -493,12 +494,17 @@ function resampleAnchors() {
   maskX.clearRect(0, 0, W, H);
   maskX.fillStyle = '#fff';
   const radius = 24 * unitU();
+  const sy = scrollY;
   for (const el of els) {
     let rect;
     try { rect = el.getBoundingClientRect(); } catch (e) { continue; }
     if (rect.width < 1 || rect.height < 1) continue;
-    /* only elements in (or near) the viewport carry silk */
-    if (rect.bottom < -80 || rect.top > H + 80 || rect.right < -80 || rect.left > W + 80) continue;
+    /* hero-local coords: the silk canvas scrolls with the hero, so anything
+       below the hero (the whole portfolio) never carries silk */
+    const top = rect.top + sy;
+    if (top > H + 80 || top + rect.height < -80 || rect.right < -80 || rect.left > W + 80) continue;
+    const box = { left: rect.left, top, right: rect.right, bottom: top + rect.height,
+                  width: rect.width, height: rect.height };
     const kind = el.dataset.anchor || (el.tagName === 'IMG' ? 'img' : el.id === 'player' ? 'box' : 'text');
     if (kind === 'img') {
       if (!el.naturalWidth) continue;
@@ -510,41 +516,28 @@ function resampleAnchors() {
         if (IMGDEC_CACHE.size > 60) IMGDEC_CACHE.clear();
         IMGDEC_CACHE.set(key, rel);
       }
-      for (const p of rel) ENG.anchorPts.push({ x: rect.left + p.x, y: rect.top + p.y, el });
-      maskX.drawImage(el, rect.left, rect.top, rect.width, rect.height);
+      for (const p of rel) ENG.anchorPts.push({ x: box.left + p.x, y: box.top + p.y, el });
+      maskX.drawImage(el, box.left, box.top, box.width, box.height);
     } else if (kind === 'box') {
-      for (const p of roundedRectPoints(rect, radius, 7)) { p.el = el; ENG.anchorPts.push(p); }
+      for (const p of roundedRectPoints(box, radius, 7)) { p.el = el; ENG.anchorPts.push(p); }
       maskX.beginPath();
-      maskX.roundRect(rect.left, rect.top, rect.width, rect.height, radius);
+      maskX.roundRect(box.left, box.top, box.width, box.height, radius);
       maskX.fill();
     } else {
       const c = textRaster(el, rect);
       if (!c) continue;
-      for (const p of c.pts) ENG.anchorPts.push({ x: rect.left - c.pad + p.x, y: rect.top - c.pad + p.y, el });
-      maskX.drawImage(c.cv, rect.left - c.pad, rect.top - c.pad);
+      for (const p of c.pts) ENG.anchorPts.push({ x: box.left - c.pad + p.x, y: box.top - c.pad + p.y, el });
+      maskX.drawImage(c.cv, box.left - c.pad, box.top - c.pad);
     }
   }
   try { maskData = maskX.getImageData(0, 0, W, H).data; } catch (e) { maskData = null; }
-  /* object wobble rects */
+  /* object wobble rects (hero-local) */
   for (const w of ENG.objs) {
     const r = w.el.getBoundingClientRect();
-    w.cx = r.left + r.width / 2; w.cy = r.top + r.height / 2;
+    w.cx = r.left + r.width / 2;
+    w.cy = r.top + sy + r.height / 2;
     w.halfW = r.width / 2; w.halfH = r.height / 2;
     w.size = Math.max(r.width, r.height);
-  }
-}
-
-/* keep silk pinned to the elements it was spun onto as the page scrolls */
-function shiftPins() {
-  for (const r of ENG.ropes) {
-    if (r.trackA) {
-      const rc = r.trackA.el.getBoundingClientRect();
-      if (rc.width > 0) { r.pts[0].x = rc.left + r.trackA.ox; r.pts[0].y = rc.top + r.trackA.oy; }
-    }
-    if (r.trackB) {
-      const rc = r.trackB.el.getBoundingClientRect();
-      if (rc.width > 0) { r.pts[r.n].x = rc.left + r.trackB.ox; r.pts[r.n].y = rc.top + r.trackB.oy; }
-    }
   }
 }
 

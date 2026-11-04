@@ -65,8 +65,18 @@ function updateSpider(dt) {
   } else {
     /* ---- walk / follow / jump ---- */
     const pt = ENG.pointer;
-    const tgt = ENG.jumpPounce ? null : (ENG.fly.vis > 0.05 ? { x: ENG.fly.x, y: ENG.fly.y }
-                                       : pt.has ? { x: pt.x, y: pt.y } : null);
+    /* the spider plays only on the hero: ignore targets that scrolled below it */
+    let tgt = null;
+    if (!ENG.jumpPounce) {
+      if (ENG.fly.vis > 0.05) {
+        const fl = heroLocal(ENG.fly.x, ENG.fly.y);
+        if (fl.y > -30 && fl.y < H - 6) tgt = fl;
+      }
+      if (!tgt && pt.has) {
+        const pl = heroLocal(pt.x, pt.y);
+        if (pl.y > -30 && pl.y < H - 6) tgt = pl;
+      }
+    }
     if (sp.jump) {
       const J = sp.jump;
       J.t += dt;

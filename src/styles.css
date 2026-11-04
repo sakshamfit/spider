@@ -180,11 +180,36 @@ body{
 }
 
 /* ---------- web layers ---------- */
-.web-layer{position:fixed;inset:0;z-index:5;pointer-events:none}
+/* silk + spider live inside the hero so they scroll away with the main page;
+   only the fly keeps a fixed layer for the whole document */
+.web-layer{position:absolute;inset:0;z-index:5;pointer-events:none}
 #web{width:100%;height:100%;display:block}
+.fly-layer{position:fixed;inset:0;z-index:7;pointer-events:none}
+#flyweb{width:100%;height:100%;display:block}
 .over{position:absolute;inset:0;z-index:6;pointer-events:none}
 .over .found{visibility:hidden}
 .over .found .o{opacity:1;visibility:visible}
+
+/* ---------- wipe button ---------- */
+.wipe{
+  position:fixed;
+  right:max(12px, env(safe-area-inset-right));
+  bottom:max(38px, calc(env(safe-area-inset-bottom) + 30px));
+  z-index:8;
+  border:0;
+  padding:9px 18px;
+  border-radius:999px;
+  background:rgba(255,255,255,.1);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.25);
+  backdrop-filter:blur(10px);
+  -webkit-backdrop-filter:blur(10px);
+  color:rgba(255,255,255,.85);
+  font:600 11px/1 "Inter",system-ui,sans-serif;
+  letter-spacing:.08em;text-transform:uppercase;
+  transition:background .25s;
+}
+.wipe:hover{background:rgba(255,255,255,.2)}
+.wipe:active{transform:scale(.96)}
 
 /* ---------- portfolio sections ---------- */
 .below{position:relative;z-index:1;display:block}
