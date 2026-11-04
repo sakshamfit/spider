@@ -1,0 +1,4 @@
+node_modules/
+raw/*.png
+raw/*.jpg
+!raw/eyes.json
