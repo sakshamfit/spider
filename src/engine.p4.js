@@ -229,22 +229,12 @@ function distToRope(P, rope) {
   return best;
 }
 
-function trackFor(P, end) {
-  /* element-relative pin descriptor so the pin follows the element on scroll */
-  if (!P || !P.el) return null;
-  const rc = P.el.getBoundingClientRect();
-  if (!rc.width && !rc.height) return null;
-  return { el: P.el, ox: P.x - rc.left, oy: P.y - rc.top, _end: end };
-}
-
 function attachLive(P) {
   const live = ENG.live;
   live.live = false;
   live.pts[live.n].pin = 1;
   addDew(live);
   ENG.ropes.push(live);
-  const tA = trackFor(P, 'A');
-  if (tA) { delete tA._end; live.trackA = tA; }
 
   /* radial thread to nearest earlier anchor */
   let bestQ = null, bestQD = 288;
@@ -254,9 +244,6 @@ function attachLive(P) {
   }
   if (bestQ) {
     const rope = new Rope(P, bestQ, 0.7, { slack: 1.09 + Math.random() * 0.05 });
-    if (tA) rope.trackA = { ...tA };
-    const tB = trackFor(bestQ, 'B');
-    if (tB) { delete tB._end; rope.trackB = tB; }
     ENG.ropes.push(rope);
   }
   /* extra thread to a nearby outline point */
@@ -268,9 +255,6 @@ function attachLive(P) {
     }
     if (bestR) {
       const rope = new Rope(P, bestR, 0.85, { slack: 1.10 + Math.random() * 0.05 });
-      if (tA) rope.trackA = { ...tA };
-      const tB = trackFor(bestR, 'B');
-      if (tB) { delete tB._end; rope.trackB = tB; }
       ENG.ropes.push(rope);
     }
   }
@@ -278,7 +262,6 @@ function attachLive(P) {
   ENG.lastAnchor = P;
   const s0 = spiderSpinneret(ENG.spider);
   ENG.live = new Rope(P, s0, 1.25, { live: true, slack: 1.055 });
-  if (tA) ENG.live.trackA = { ...tA };
   webVibrate(P.x, P.y, 60, 1.2);
   stampTufts(P);
   if (ENG.ropes.length > 140) pruneOldThreads();

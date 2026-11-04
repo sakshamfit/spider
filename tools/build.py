@@ -67,7 +67,8 @@ html = f'''<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Found</title>
+<title>saksham — Full-Stack &amp; Product Developer</title>
+<meta name="description" content="Portfolio of Anshuman Pandey — full-stack & product developer. Move the fly; the spider is waiting.">
 <style>
 {css}
 </style>
