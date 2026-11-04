@@ -1,7 +1,7 @@
 /* ============================================================ object wobble */
 function initObjects() {
-  const els = [$('#mug'), $('#ibook'), $('#book'), $('#tshirt'),
-               ...$$('.nav-icons button')];
+  const els = [$('#mug'), $('#p-one'), $('#p-near'), $('#tshirt'),
+               ...$$('.nav-icons a')];
   for (const el of els) {
     if (!el) continue;
     ENG.objs.push({
@@ -187,6 +187,41 @@ function clearWeb() {
   ENG.live = null; /* a fresh live thread starts from the spinneret */
 }
 
+/* ============================================================ scroll */
+function shiftAllPins() { if (typeof shiftPins === 'function') shiftPins(); }
+
+function onScrollJump() {
+  for (const s of ENG.splats) if (s.fall === undefined) s.fall = rand(0, 0.3);
+  clearDebris();
+  shiftAllPins();
+}
+
+function updateActiveNav() {
+  const links = $$('.nav-links a');
+  let best = 0;
+  links.forEach((a, i) => {
+    const href = a.getAttribute('href') || '';
+    if (!href.startsWith('#')) return;
+    const t = document.getElementById(href.slice(1));
+    if (!t) return;
+    if (t.getBoundingClientRect().top <= innerHeight * 0.45) best = i;
+  });
+  links.forEach((a, i) => a.classList.toggle('active', i === best));
+}
+
+function initScroll() {
+  let lastY = scrollY, timer = 0;
+  document.addEventListener('scroll', () => {
+    requestAnimationFrame(updateActiveNav);
+    if (Math.abs(scrollY - lastY) < 3) return;
+    lastY = scrollY;
+    onScrollJump();
+    clearTimeout(timer);
+    timer = setTimeout(() => { shiftAllPins(); resampleAnchors(); }, 150);
+  }, { passive: true });
+  updateActiveNav();
+}
+
 /* ============================================================ resize */
 let resizeTimer = 0;
 function doResize() {
@@ -277,8 +312,13 @@ async function boot() {
     initObjects();
     initPlayer();
     initInput();
+    initScroll();
     doResize();
     ENG.ready = true;
+    /* hotlinked images shift layout as they arrive — resample when they do */
+    document.addEventListener('load', e => {
+      if (e.target && e.target.tagName === 'IMG') { shiftAllPins(); scheduleResample(200); }
+    }, true);
     requestAnimationFrame(frame);
   } catch (err) {
     console.error('boot failed', err);

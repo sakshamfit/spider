@@ -212,12 +212,22 @@ function distToRope(P, rope) {
   return best;
 }
 
+function trackFor(P, end) {
+  /* element-relative pin descriptor so the pin follows the element on scroll */
+  if (!P || !P.el) return null;
+  const rc = P.el.getBoundingClientRect();
+  if (!rc.width && !rc.height) return null;
+  return { el: P.el, ox: P.x - rc.left, oy: P.y - rc.top, _end: end };
+}
+
 function attachLive(P) {
   const live = ENG.live;
   live.live = false;
   live.pts[live.n].pin = 1;
   addDew(live);
   ENG.ropes.push(live);
+  const tA = trackFor(P, 'A');
+  if (tA) { delete tA._end; live.trackA = tA; }
 
   /* radial thread to nearest earlier anchor */
   let bestQ = null, bestQD = 288;
@@ -225,7 +235,13 @@ function attachLive(P) {
     const d = hyp(Q.x - P.x, Q.y - P.y);
     if (d < bestQD) { bestQD = d; bestQ = Q; }
   }
-  if (bestQ) ENG.ropes.push(new Rope(P, bestQ, 0.7));
+  if (bestQ) {
+    const rope = new Rope(P, bestQ, 0.7);
+    if (tA) rope.trackA = { ...tA };
+    const tB = trackFor(bestQ, 'B');
+    if (tB) { delete tB._end; rope.trackB = tB; }
+    ENG.ropes.push(rope);
+  }
   /* extra thread to a nearby outline point */
   if (Math.random() < 0.75) {
     let bestR = null, bestRD = 204;
@@ -233,12 +249,19 @@ function attachLive(P) {
       const d = hyp(Q.x - P.x, Q.y - P.y);
       if (d > 45 && d < bestRD) { bestRD = d; bestR = Q; }
     }
-    if (bestR) ENG.ropes.push(new Rope(P, bestR, 0.85));
+    if (bestR) {
+      const rope = new Rope(P, bestR, 0.85);
+      if (tA) rope.trackA = { ...tA };
+      const tB = trackFor(bestR, 'B');
+      if (tB) { delete tB._end; rope.trackB = tB; }
+      ENG.ropes.push(rope);
+    }
   }
   ENG.attachPts.push(P);
   ENG.lastAnchor = P;
   const s0 = spiderSpinneret(ENG.spider);
   ENG.live = new Rope(P, s0, 1.25, { live: true });
+  if (tA) ENG.live.trackA = { ...tA };
   webVibrate(P.x, P.y, 60, 1.2);
   stampTufts(P);
   if (ENG.ropes.length > 140) pruneOldThreads();
@@ -307,6 +330,8 @@ function makeDewSprite() {
 
 /* ============================================================ anchor sampling */
 const EDGE_CACHE = new Map();
+const TEXT_CACHE = new WeakMap();
+const IMGDEC_CACHE = new Map();
 let _uProbe = null;
 function unitU() {
   if (!_uProbe) {
@@ -341,13 +366,19 @@ function imageEdgePixels(img) {
   return EDGE_CACHE.get(img.src);
 }
 
-function textEdgePoints(el, rect) {
+/* rasterise a text element once per (font-size, line-height, width) and cache
+   both the raster (for the mask) and its decimated edge points */
+function textRaster(el, rect) {
   const cs = getComputedStyle(el);
   const fs = parseFloat(cs.fontSize) || 16;
-  const lh = parseFloat(cs.lineHeight) || fs * 1.2;
+  const lhRaw = cs.lineHeight;
+  const lh = lhRaw === 'normal' ? fs * 1.2 : (parseFloat(lhRaw) || fs * 1.2);
+  const key = [fs.toFixed(1), lh.toFixed(1), Math.round(rect.width), document.fonts ? document.fonts.status : 'x'].join('/');
+  const hit = TEXT_CACHE.get(el);
+  if (hit && hit.key === key) return hit;
   const pad = 24;
   const cw = Math.ceil(rect.width) + pad * 2, ch = Math.ceil(rect.height) + pad * 2;
-  if (cw < 4 || ch < 4 || cw > 4000 || ch > 4000) return [];
+  if (cw < 4 || ch < 4 || cw > 4200 || ch > 4200) return null;
   const c = mkCanvas(cw, ch), g = c.getContext('2d');
   g.font = (cs.fontWeight || '400') + ' ' + fs + 'px Inter, system-ui, sans-serif';
   try { if ('letterSpacing' in g) g.letterSpacing = cs.letterSpacing; } catch (e) {}
@@ -361,19 +392,20 @@ function textEdgePoints(el, rect) {
   });
   const d = g.getImageData(0, 0, cw, ch).data;
   const pts = [];
-  const step = 1;
-  for (let y = 1; y < ch - 1; y += step) {
-    for (let x = 1; x < cw - 1; x += step) {
+  for (let y = 1; y < ch - 1; y++) {
+    for (let x = 1; x < cw - 1; x++) {
       const a = d[(y * cw + x) << 2 | 3];
       if (a > 128) {
         if (d[(y * cw + x - 1) << 2 | 3] <= 128 || d[(y * cw + x + 1) << 2 | 3] <= 128 ||
             d[((y - 1) * cw + x) << 2 | 3] <= 128 || d[((y + 1) * cw + x) << 2 | 3] <= 128) {
-          pts.push({ x: rect.left - pad + x, y: rect.top - pad + y });
+          pts.push({ x, y });
         }
       }
     }
   }
-  return pts;
+  const out = { key, pad, cv: c, pts: decimate(pts, 6) };
+  TEXT_CACHE.set(el, out);
+  return out;
 }
 
 function roundedRectPoints(rect, r, step) {
@@ -445,41 +477,35 @@ function resampleAnchors() {
   maskX.clearRect(0, 0, W, H);
   maskX.fillStyle = '#fff';
   const radius = 24 * unitU();
-  let total = 0;
   for (const el of els) {
     let rect;
     try { rect = el.getBoundingClientRect(); } catch (e) { continue; }
     if (rect.width < 1 || rect.height < 1) continue;
-    if (el.tagName === 'IMG') {
+    /* only elements in (or near) the viewport carry silk */
+    if (rect.bottom < -80 || rect.top > H + 80 || rect.right < -80 || rect.left > W + 80) continue;
+    const kind = el.dataset.anchor || (el.tagName === 'IMG' ? 'img' : el.id === 'player' ? 'box' : 'text');
+    if (kind === 'img') {
+      if (!el.naturalWidth) continue;
       const info = imageEdgePixels(el);
-      const pts = [];
-      for (const p of info.pts) {
-        pts.push({ x: rect.left + p[0] / info.nw * rect.width, y: rect.top + p[1] / info.nh * rect.height });
+      const key = el.src + '|' + Math.round(rect.width) + 'x' + Math.round(rect.height);
+      let rel = IMGDEC_CACHE.get(key);
+      if (!rel) {
+        rel = decimate(info.pts.map(p => ({ x: p[0] / info.nw * rect.width, y: p[1] / info.nh * rect.height })), 7);
+        if (IMGDEC_CACHE.size > 60) IMGDEC_CACHE.clear();
+        IMGDEC_CACHE.set(key, rel);
       }
-      ENG.anchorPts.push(...decimate(pts, 7));
+      for (const p of rel) ENG.anchorPts.push({ x: rect.left + p.x, y: rect.top + p.y, el });
       maskX.drawImage(el, rect.left, rect.top, rect.width, rect.height);
-    } else if (el.id === 'player') {
-      const pts = roundedRectPoints(rect, radius, 7);
-      ENG.anchorPts.push(...pts);
+    } else if (kind === 'box') {
+      for (const p of roundedRectPoints(rect, radius, 7)) { p.el = el; ENG.anchorPts.push(p); }
       maskX.beginPath();
       maskX.roundRect(rect.left, rect.top, rect.width, rect.height, radius);
       maskX.fill();
     } else {
-      /* text element */
-      const pts = textEdgePoints(el, rect);
-      ENG.anchorPts.push(...decimate(pts, 6));
-      /* mask: redraw text into mask */
-      const cs = getComputedStyle(el);
-      const fs = parseFloat(cs.fontSize) || 16;
-      const lh = parseFloat(cs.lineHeight) || fs * 1.2;
-      maskX.font = (cs.fontWeight || '400') + ' ' + fs + 'px Inter, system-ui, sans-serif';
-      try { if ('letterSpacing' in maskX) maskX.letterSpacing = cs.letterSpacing; } catch (e) {}
-      maskX.textBaseline = 'alphabetic';
-      const lines = el.innerText ? el.innerText.split('\n') : [(el.textContent || '')];
-      const indent = parseFloat(cs.textIndent) || 0;
-      lines.forEach((ln, i) => {
-        maskX.fillText(ln, rect.left + (i === 0 ? indent : 0) - (el.classList.contains('found') ? 0 : 0), rect.top + lh * (i + 0.78));
-      });
+      const c = textRaster(el, rect);
+      if (!c) continue;
+      for (const p of c.pts) ENG.anchorPts.push({ x: rect.left - c.pad + p.x, y: rect.top - c.pad + p.y, el });
+      maskX.drawImage(c.cv, rect.left - c.pad, rect.top - c.pad);
     }
   }
   try { maskData = maskX.getImageData(0, 0, W, H).data; } catch (e) { maskData = null; }
@@ -490,6 +516,26 @@ function resampleAnchors() {
     w.halfW = r.width / 2; w.halfH = r.height / 2;
     w.size = Math.max(r.width, r.height);
   }
+}
+
+/* keep silk pinned to the elements it was spun onto as the page scrolls */
+function shiftPins() {
+  for (const r of ENG.ropes) {
+    if (r.trackA) {
+      const rc = r.trackA.el.getBoundingClientRect();
+      if (rc.width > 0) { r.pts[0].x = rc.left + r.trackA.ox; r.pts[0].y = rc.top + r.trackA.oy; }
+    }
+    if (r.trackB) {
+      const rc = r.trackB.el.getBoundingClientRect();
+      if (rc.width > 0) { r.pts[r.n].x = rc.left + r.trackB.ox; r.pts[r.n].y = rc.top + r.trackB.oy; }
+    }
+  }
+}
+
+let _resampleTimer = 0;
+function scheduleResample(delay) {
+  clearTimeout(_resampleTimer);
+  _resampleTimer = setTimeout(resampleAnchors, delay === undefined ? 140 : delay);
 }
 
 /* tufts + bead at attachment points, stamped into a static debris layer */

@@ -33,6 +33,8 @@ assets = {
     'play': b64(f'{A}/play.png', 'image/png'),
     'next': b64(f'{A}/next.png', 'image/png'),
     'repeat': b64(f'{A}/repeat.png', 'image/png'),
+    'github': b64(f'{A}/github.png', 'image/png'),
+    'mail': b64(f'{A}/mail.png', 'image/png'),
 }
 
 css = read(f'{SRC}/styles.css')

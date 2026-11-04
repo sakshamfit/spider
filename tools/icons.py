@@ -130,3 +130,4 @@ mask = mask.resize((80, 80), Image.LANCZOS)
 im.putalpha(mask)
 im.save(os.path.join(OUT, 'art.png'), optimize=True)
 print('art.png', im.size, os.path.getsize(os.path.join(OUT, 'art.png')))
+
