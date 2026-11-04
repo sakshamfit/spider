@@ -1159,7 +1159,9 @@ const SILK = 'rgba(255,255,255,0.75)';
 
 function Rope(A, B, thick, opts) {
   opts = opts || {};
-  this.n = 12;
+  const d = hyp(B.x - A.x, B.y - A.y);
+  /* more segments on longer spans so the droop reads as a smooth catenary */
+  this.n = clamp(Math.round(d / 26), 12, 26);
   this.pts = [];
   for (let i = 0; i <= this.n; i++) {
     const t = i / this.n;
@@ -1168,8 +1170,8 @@ function Rope(A, B, thick, opts) {
   }
   if (opts.freeEnd) this.pts[this.n].pin = 0;
   this.thick = thick;
-  const d = hyp(B.x - A.x, B.y - A.y);
-  this.rest = d / this.n * (1.01 + Math.random() * 0.005);
+  /* real slack: thread is several percent longer than the span */
+  this.rest = d / this.n * (opts.slack || 1.07 + Math.random() * 0.05);
   this.phase = rand(TAU);
   this.age = 0;
   this.fade = 1;
@@ -1181,6 +1183,16 @@ function Rope(A, B, thick, opts) {
   this.decorDirty = true;
   this.decorT = 0;
   this.att = opts.att || null;
+  /* start already bowed like freshly spun slack silk, not ruler-straight */
+  const extra = this.rest * this.n - d;
+  if (extra > d * 0.015) {
+    const bow = Math.min(extra * 0.62, d * 0.6);
+    for (let i = 1; i < this.n; i++) {
+      const s = Math.sin(Math.PI * i / this.n) * bow;
+      this.pts[i].y += s;
+      this.pts[i].py = this.pts[i].y;
+    }
+  }
 }
 Rope.prototype.len = function () {
   let L = 0;
@@ -1194,24 +1206,25 @@ Rope.prototype.step = function (dt) {
   for (let i = 0; i <= n; i++) {
     const p = pts[i];
     if (p.pin) continue;
-    const vx = (p.x - p.px) * 0.975, vy = (p.y - p.py) * 0.975;
+    /* keep more swing energy alive so strands drift and rebound */
+    const vx = (p.x - p.px) * 0.984, vy = (p.y - p.py) * 0.984;
     const wind = (Math.sin(0.45 * B) * 0.6 + Math.sin(1.3 * B + 1.7) * 0.4) *
-      (0.6 + 0.4 * Math.sin(1.1 * B + 0.012 * p.y + this.phase)) * 22 * dt2;
+      (0.6 + 0.4 * Math.sin(1.1 * B + 0.012 * p.y + this.phase)) * 34 * dt2;
     p.px = p.x; p.py = p.y;
     p.x += vx + wind;
-    p.y += vy + 110 * dt2;
+    p.y += vy + 128 * dt2 + Math.sin(0.8 * B + this.phase * 2) * 6 * dt2;
   }
-  /* pointer push */
+  /* pointer pushes strands aside like a finger through thread */
   const pt = ENG.pointer;
   if (pt.has) {
     for (let i = 1; i < n; i++) {
       const p = pts[i];
       const dx = p.x - pt.x, dy = p.y - pt.y;
       const d = hyp(dx, dy);
-      if (d < 36 && d > 0.001) {
-        const f = (36 - d) / 36;
-        p.x += dx / d * f * 2.2;
-        p.y += dy / d * f * 2.2;
+      if (d < 46 && d > 0.001) {
+        const f = (46 - d) / 46;
+        p.x += dx / d * f * 2.6;
+        p.y += dy / d * f * 2.6;
       }
     }
   }
@@ -1283,7 +1296,7 @@ function updateSilk(dt) {
   const spin = spiderSpinneret(sp);
   if (!ENG.live) {
     const start = ENG.lastAnchor || (sp.intro.stage < 3 ? { x: W / 2, y: -2 } : { x: spin.x, y: spin.y });
-    ENG.live = new Rope(start, spin, 1.25, { live: true });
+    ENG.live = new Rope(start, spin, 1.25, { live: true, slack: 1.06 });
     if (!ENG.lastAnchor && sp.intro.stage < 3) { ENG.live.pts[0].x = W / 2; ENG.live.pts[0].y = -2; }
   }
   const live = ENG.live;
@@ -1291,8 +1304,12 @@ function updateSilk(dt) {
   const endP = live.pts[live.n];
   endP.x = spin.x; endP.y = spin.y; endP.px = spin.x; endP.py = spin.y;
   const dNow = hyp(spin.x - live.pts[0].x, spin.y - live.pts[0].y);
-  const restT = dNow / live.n * 1.01;
-  live.rest += (restT - live.rest) * 0.25;
+  /* the dragline pays out slack as the spider moves away and never reels back,
+     but bleeds excess down so a returning spider doesn't puddle silk */
+  const want = dNow / live.n * 1.05;
+  if (want > live.rest) live.rest += (want - live.rest) * 0.5;
+  const cap = dNow / live.n * 1.38;
+  if (live.rest > cap) live.rest += (cap - live.rest) * 0.12;
 
   /* attach check */
   if (ENG.anchorPts.length && live.len() > 40) {
@@ -1316,8 +1333,7 @@ function updateSilk(dt) {
     acc.x = sp2.x; acc.y = sp2.y;
     if (acc.d > 120) {
       acc.d = 0;
-      const r = new Rope({ x: spin.x, y: spin.y }, { x: spin.x + rand(-14, 14), y: spin.y + rand(18, 40) }, 0.8, { freeEnd: true });
-      r.rest = r.len() / r.n * 1.02;
+      const r = new Rope({ x: spin.x, y: spin.y }, { x: spin.x + rand(-14, 14), y: spin.y + rand(18, 40) }, 0.8, { freeEnd: true, slack: 1.1 });
       ENG.ropes.push(r);
     }
   }
@@ -1392,7 +1408,7 @@ function attachLive(P) {
     if (d < bestQD) { bestQD = d; bestQ = Q; }
   }
   if (bestQ) {
-    const rope = new Rope(P, bestQ, 0.7);
+    const rope = new Rope(P, bestQ, 0.7, { slack: 1.09 + Math.random() * 0.05 });
     if (tA) rope.trackA = { ...tA };
     const tB = trackFor(bestQ, 'B');
     if (tB) { delete tB._end; rope.trackB = tB; }
@@ -1406,7 +1422,7 @@ function attachLive(P) {
       if (d > 45 && d < bestRD) { bestRD = d; bestR = Q; }
     }
     if (bestR) {
-      const rope = new Rope(P, bestR, 0.85);
+      const rope = new Rope(P, bestR, 0.85, { slack: 1.10 + Math.random() * 0.05 });
       if (tA) rope.trackA = { ...tA };
       const tB = trackFor(bestR, 'B');
       if (tB) { delete tB._end; rope.trackB = tB; }
@@ -1416,7 +1432,7 @@ function attachLive(P) {
   ENG.attachPts.push(P);
   ENG.lastAnchor = P;
   const s0 = spiderSpinneret(ENG.spider);
-  ENG.live = new Rope(P, s0, 1.25, { live: true });
+  ENG.live = new Rope(P, s0, 1.25, { live: true, slack: 1.055 });
   if (tA) ENG.live.trackA = { ...tA };
   webVibrate(P.x, P.y, 60, 1.2);
   stampTufts(P);
@@ -1806,7 +1822,7 @@ function drawThread(r) {
   /* per-segment strand + iridescence + fibres */
   for (let i = 0; i < n; i++) {
     const a = pts[i], b = pts[i + 1];
-    const wSeg = th * (0.9 - 0.35 * Math.sin(Math.PI * i / 12));
+    const wSeg = th * (0.9 - 0.35 * Math.sin(Math.PI * i / n));
     ctx.strokeStyle = 'rgba(255,255,255,' + (0.8 * fade).toFixed(3) + ')';
     ctx.lineWidth = Math.max(0.3, wSeg);
     ctx.beginPath();

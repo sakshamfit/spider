@@ -86,7 +86,7 @@ function drawThread(r) {
   /* per-segment strand + iridescence + fibres */
   for (let i = 0; i < n; i++) {
     const a = pts[i], b = pts[i + 1];
-    const wSeg = th * (0.9 - 0.35 * Math.sin(Math.PI * i / 12));
+    const wSeg = th * (0.9 - 0.35 * Math.sin(Math.PI * i / n));
     ctx.strokeStyle = 'rgba(255,255,255,' + (0.8 * fade).toFixed(3) + ')';
     ctx.lineWidth = Math.max(0.3, wSeg);
     ctx.beginPath();
